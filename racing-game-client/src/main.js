@@ -22,7 +22,13 @@ const config = {
         MainMenu,
         Game,
         GameOver
-    ]
+    ],
+    physics: {
+        default: 'arcade', // Enable Arcade Physics
+        arcade: {
+            gravity: { y: 0 } // No gravity for a top-down racing game
+        }
+    }
 };
 
 export default new Phaser.Game(config);
