@@ -9,15 +9,16 @@ export default class Car extends Phaser.GameObjects.Image {
         this.body.setCollideWorldBounds(true);
         this.speed = 0;
         this.maxSpeed = 200;
+        this.maxReverseSpeed = 100;
         this.acceleration = 10;
-        this.deceleration = 50;
+        this.deceleration = 200;
         this.turnSpeed = 5;
 
         this.body.setDrag(0.9);
 
         // Nastavíme pôvod na stred auta pre správne otáčanie
         this.setOrigin(0.5, 0.5);
-        this.setScale(0.5, 0.5); // Zmenšíme auto pre lepšie zobrazenie
+        this.setScale(0.4, 0.4); // Zmenšíme auto pre lepšie zobrazenie
     }
 
     accelerate() {
@@ -26,6 +27,10 @@ export default class Car extends Phaser.GameObjects.Image {
 
     decelerate() {
         this.speed = Math.max(this.speed - this.acceleration, 0);
+    }
+
+    reverse() {
+        this.speed = Math.max(this.speed - this.acceleration, -this.maxReverseSpeed); // Cúvanie
     }
 
     turnLeft() {
@@ -40,6 +45,8 @@ export default class Car extends Phaser.GameObjects.Image {
         // Apply deceleration when not accelerating
         if (this.speed > 0) {
             this.speed = Math.max(this.speed - this.deceleration * (delta / 1000), 0);
+        } else if (this.speed < 0) {
+            this.speed = Math.min(this.speed + this.deceleration * (delta / 1000), 0);
         }
 
         // Modified velocity calculation assuming car image faces upwards
