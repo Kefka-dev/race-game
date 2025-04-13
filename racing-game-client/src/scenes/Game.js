@@ -18,10 +18,10 @@ export class Game extends Scene
     {
 
 
-        const map = this.make.tilemap({key: 'map', tileWidth: 128, tileHeight: 128});
-        const tileset = map.addTilesetImage('spritesheet_tiles', 'tiles');
-        const layer = map.createLayer('trackLayer', tileset, 0,0);
-        layer.setScale(0.5);
+        this.map = this.make.tilemap({key: 'map', tileWidth: 128, tileHeight: 128});
+        const tileset = this.map.addTilesetImage('spritesheet_tiles', 'tiles');
+        this.layer = this.map.createLayer('trackLayer', tileset, 0,0);
+        this.layer.setScale(0.5);
 
 
         this.cameras.main.setBackgroundColor(0x219c60);
@@ -39,7 +39,7 @@ export class Game extends Scene
         if (this.cursors.up.isDown) {
             this.car.accelerate();
         } else if (this.cursors.down.isDown) {
-            this.car.decelerate();
+            this.car.reverse();
         }
 
         if (this.cursors.left.isDown) {
@@ -50,13 +50,19 @@ export class Game extends Scene
 
         // Update car
         this.car.update(delta);
-        console.log(this.car.x + ' ' + this.car.y);
-        // Check if the car is on the road
-        //const tile = this.map.getTileAtWorldXY(this.car.x, this.car.y, true, this.cameras.main, this.layer);
-        //if (tile && tile.properties.onTrack) {
-        //    console.log('Car is on the road');
-        //} else {
-        //    console.log('Car is off the road');
-        //}
+
+        // console.log(this.car.x + ' ' + this.car.y);
+        // Získaj tile, na ktorom sa nachádza auto
+        const tile = this.map.getTileAtWorldXY(this.car.x, this.car.y, true, this.cameras.main, this.layer);
+
+        // Skontroluj, či je tile na ceste
+        if (tile && tile.properties.onTrack) {
+            // console.log('Auto je na ceste');
+        } else {
+            // console.log('Auto nie je na ceste');
+            if (this.car.speed >this.car.maxSpeed/3){
+                this.car.speed = this.car.maxSpeed/3;
+            }
+        }
     }
 }
