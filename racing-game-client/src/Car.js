@@ -10,15 +10,15 @@ export default class Car extends Phaser.GameObjects.Image {
         this.speed = 0;
         this.maxSpeed = 200;
         this.maxReverseSpeed = 100;
-        this.acceleration = 10;
+        this.acceleration = 20;
         this.deceleration = 200;
         this.turnSpeed = 5;
 
-        this.body.setDrag(0.9);
+        this.body.setDrag(0.8);
 
+        this.setScale(0.4, 0.4); // Zmenšíme auto pre lepšie zobrazenie
         // Nastavíme pôvod na stred auta pre správne otáčanie
         this.setOrigin(0.5, 0.5);
-        this.setScale(0.4, 0.4); // Zmenšíme auto pre lepšie zobrazenie
     }
 
     accelerate() {
