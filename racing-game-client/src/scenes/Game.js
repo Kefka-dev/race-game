@@ -35,7 +35,6 @@ export class Game extends Scene
         this.cursors = this.input.keyboard.createCursorKeys();
 
         //websocket setup
-        //TODO - add /game into NGINX config
         this.socket = new WebSocket('/game')
 
 
