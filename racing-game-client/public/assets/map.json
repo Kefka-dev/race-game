@@ -3,11 +3,11 @@
   "infinite":false,
   "layers":[
     {
-      "data":[0, 150, 186, 186, 186, 307, 186, 186, 186, 132, 0, 0, 0, 0, 0, 0,
-        0, 203, 95, 184, 184, 271, 184, 184, 77, 167, 0, 0, 0, 0, 0, 0,
-        0, 203, 167, 0, 0, 0, 0, 0, 203, 167, 0, 0, 0, 0, 0, 0,
-        0, 203, 167, 0, 0, 0, 0, 0, 203, 94, 186, 186, 186, 186, 186, 132,
-        0, 203, 167, 0, 0, 0, 0, 0, 149, 184, 184, 184, 184, 184, 77, 167,
+      "data":[0, 150, 186, 186, 186, 307, 186, 186, 186, 132, 0, 150, 186, 186, 186, 132,
+        0, 203, 95, 184, 184, 271, 184, 184, 77, 167, 0, 203, 95, 184, 77, 167,
+        0, 203, 167, 0, 0, 0, 0, 0, 203, 167, 0, 203, 167, 0, 203, 167,
+        0, 203, 167, 0, 0, 0, 0, 0, 203, 94, 186, 76, 167, 0, 203, 167,
+        0, 203, 167, 0, 0, 0, 0, 0, 149, 184, 184, 184, 131, 0, 203, 167,
         0, 203, 167, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 203, 167,
         0, 203, 167, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 203, 167,
         0, 203, 167, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 203, 167,
@@ -35,7 +35,7 @@
     {
       "columns":18,
       "firstgid":1,
-      "image":"spritesheet_tiles.png",
+      "image":"..\/..\/Downloads\/kenney_racing-pack\/Spritesheets\/spritesheet_tiles.png",
       "imageheight":2304,
       "imagewidth":2304,
       "margin":0,
@@ -383,6 +383,11 @@
           "id":129,
           "properties":[
             {
+              "name":"finishLine",
+              "type":"bool",
+              "value":true
+            },
+            {
               "name":"onTrack",
               "type":"bool",
               "value":true
@@ -427,6 +432,11 @@
         {
           "id":147,
           "properties":[
+            {
+              "name":"finishLine",
+              "type":"bool",
+              "value":true
+            },
             {
               "name":"onTrack",
               "type":"bool",
@@ -727,6 +737,11 @@
           "id":270,
           "properties":[
             {
+              "name":"finishLine",
+              "type":"bool",
+              "value":true
+            },
+            {
               "name":"onTrack",
               "type":"bool",
               "value":true
@@ -735,6 +750,11 @@
         {
           "id":271,
           "properties":[
+            {
+              "name":"finishLine",
+              "type":"bool",
+              "value":true
+            },
             {
               "name":"onTrack",
               "type":"bool",
@@ -773,6 +793,11 @@
           "id":288,
           "properties":[
             {
+              "name":"finishLine",
+              "type":"bool",
+              "value":true
+            },
+            {
               "name":"onTrack",
               "type":"bool",
               "value":true
@@ -781,6 +806,11 @@
         {
           "id":289,
           "properties":[
+            {
+              "name":"finishLine",
+              "type":"bool",
+              "value":true
+            },
             {
               "name":"onTrack",
               "type":"bool",
@@ -818,6 +848,11 @@
           "id":306,
           "properties":[
             {
+              "name":"finishLine",
+              "type":"bool",
+              "value":true
+            },
+            {
               "name":"onTrack",
               "type":"bool",
               "value":true
@@ -826,6 +861,11 @@
         {
           "id":307,
           "properties":[
+            {
+              "name":"finishLine",
+              "type":"bool",
+              "value":true
+            },
             {
               "name":"onTrack",
               "type":"bool",
