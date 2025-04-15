@@ -24,8 +24,8 @@ const config = {
         GameOver
     ],
     physics: {
-        default: 'arcade', // Enable Arcade Physics
-        arcade: {
+        default: 'matter', // Enable Arcade Physics
+        matter: {
             gravity: { y: 0 } // No gravity for a top-down racing game
         }
     }
