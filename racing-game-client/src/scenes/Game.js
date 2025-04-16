@@ -37,6 +37,9 @@ export class Game extends Scene
 
 
         this.car = new Car(this, 296, 32, 'car1');
+        this.car.body.parts[0].label = 'playerCarBody';
+        this.car.body.parts[1].label = 'playerFrontSensor';
+        this.car.body.parts[2].label = 'playerRearSensor';
         this.car.setRotation(Math.PI/2);
         this.cursors = this.input.keyboard.createCursorKeys();
 
@@ -58,6 +61,9 @@ export class Game extends Scene
 
             if (msg.type === 'welcome') {
                 this.playerId = msg.playerId;
+                // Set initial position based on spawn point from server
+                this.car.setPosition(msg.spawnX, msg.spawnY);
+                this.car.setRotation(msg.spawnRotation || Math.PI/2);
             }
 
             if (msg.type === 'playerUpdate' && msg.playerId !== this.playerId) {
@@ -77,7 +83,12 @@ export class Game extends Scene
                 }
             }
         });
-
+        // V metóde create() scény Game
+        this.debugGraphics = this.add.graphics();
+        this.debugGraphics.visible = false; // Skryjeme grafiku na začiatku 
+        this.input.keyboard.on('keydown-D', () => {
+            this.debugGraphics.visible = !this.debugGraphics.visible;
+        });
     }
     update (time, delta)
     {
@@ -114,6 +125,35 @@ export class Game extends Scene
         this.car.update(delta);
 
         // console.log(this.car.x + ' ' + this.car.y);
+
+
+        // Vymažeme predchádzajúce kresby
+        this.debugGraphics.clear();
+
+        // Nastavíme štýl čiar - môžeš si ho prispôsobiť
+        this.debugGraphics.lineStyle(1, 0x00ff00);
+
+        // Kreslíme hitboxy hráčovho auta (rovnaký princíp aplikuješ aj na ostatné objekty)
+        this.car.body.parts.forEach(part => {
+            // Preskočíme prvú časť, ktorá je celkovým telom (ak chceme kresliť len jednotlivé časti)
+            // Ale ak chceš kompletný obrys, môžeš ju zahrnúť – skús si to podľa potreby:
+            // Ak by si chcel nakresliť všetky časti, táto podmienka nie je potrebná.
+            if (part === this.car.body) {
+                return;
+            }
+            this.debugGraphics.beginPath();
+            // Prejdenie všetkými vertexmi danej časti
+            part.vertices.forEach((vertex, index) => {
+                if (index === 0) {
+                    this.debugGraphics.moveTo(vertex.x, vertex.y);
+                } else {
+                    this.debugGraphics.lineTo(vertex.x, vertex.y);
+                }
+            });
+            // Spojíme posledný bod s prvým a nakreslíme obrys
+            this.debugGraphics.closePath();
+            this.debugGraphics.strokePath();
+        });
 
         // pošli pozíciu
         if (this.socket && this.socket.readyState === WebSocket.OPEN) {
