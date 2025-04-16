@@ -12,7 +12,7 @@ export default class Car extends Phaser.Physics.Matter.Image {
         this.originalMaxSpeed = this.maxSpeed;
         this.maxReverseSpeed = 3;
         this.acceleration = 1;
-        this.deceleration = 10;
+        this.deceleration = 5;
         this.turnSpeed = 4;
 
         // Create main body and sensors
