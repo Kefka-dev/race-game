@@ -15,6 +15,10 @@ export default class Car extends Phaser.Physics.Matter.Image {
         this.deceleration = 5;
         this.turnSpeed = 4;
 
+        //lap counter
+        this.laps = 0;
+        this.canCompleteLap = false;
+
         // Create main body and sensors
         const mainBody = scene.matter.bodies.rectangle(
             x, y,
@@ -120,5 +124,10 @@ export default class Car extends Phaser.Physics.Matter.Image {
         const velocityY = -Math.cos(this.rotation) * this.speed;
         this.setVelocity(velocityX, velocityY);
         this.setAngularVelocity(0);
+    }
+
+    resetLapState() {
+        this.laps = 0;
+        this.canCompleteLap = true;
     }
 }

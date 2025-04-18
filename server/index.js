@@ -6,7 +6,7 @@ const players = {};
 let nextPlayerId = 0;
 let hostId = null;
 let gameState = 'WAITING'; //'WAITING' or 'RACING'
-const MIN_PLAYERS_TO_START = 2;
+const MIN_PLAYERS_TO_START = 1;
 
 const spawnPoints = [
     { x: 296, y: 32, rotation: Math.PI/2 },

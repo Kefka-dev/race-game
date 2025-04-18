@@ -24,6 +24,10 @@ export class Game extends Scene
         this.startButton = null; // Reference to start button
         this.guestRoundsDisplay = null; // Ref to span for guest rounds
         this.startErrorElement = null; // Ref to error paragraph
+
+        //lapcounter UI
+        this.lapText = null;      // Reference to the Phaser Text object for laps
+        this.totalLaps = 0;       // Total laps for the race (from settings)
     }
 
     preload ()
@@ -124,6 +128,9 @@ export class Game extends Scene
                     const spawnRotation = myPlayerData.rotation;
                     // --- End of FIX ---
 
+                    // Store total laps from settings
+                    this.totalLaps = msg.settings.rounds || 3; // Use setting or default to 3
+
                     // Create player car NOW
                     this.car = new Car(this, spawnX, spawnY, 'car1');
                     this.car.body.parts[0].label = 'playerCarBody';
@@ -147,6 +154,26 @@ export class Game extends Scene
                             }
                         }
                     }
+
+                    // --- Initialize Lap Counter UI ---
+                    // Ensure previous text is destroyed if game restarts without scene restart
+                    if (this.lapText) {
+                        this.lapText.destroy();
+                    }
+                    // Create the text object
+                    this.lapText = this.add.text(
+                        10, 10, // Position (top-left corner)
+                        `Lap: ${this.car.laps} / ${this.totalLaps}`, // Initial text
+                        {
+                            fontSize: '24px',
+                            fill: '#ffffff', // White text
+                            stroke: '#000000', // Black stroke
+                            strokeThickness: 4 // Stroke thickness
+                        }
+                    )
+                        .setScrollFactor(0) // Makes it stick to the camera (HUD)
+                        .setDepth(10); // Ensure it's drawn on top
+
                     break;
 
                 case 'playerJoined': // Optional: For lobby UI updates
@@ -245,6 +272,7 @@ export class Game extends Scene
             this.car = null;
             Object.values(this.otherCars).forEach(car => car.destroy());
             this.otherCars = {};
+            if (this.lapText) { this.lapText.destroy(); this.lapText = null; } //clean up text
         });
 
         this.socket.addEventListener('error', (error) => {
@@ -258,6 +286,7 @@ export class Game extends Scene
             this.car = null;
             Object.values(this.otherCars).forEach(car => car.destroy());
             this.otherCars = {};
+            if (this.lapText) { this.lapText.destroy(); this.lapText = null; }
         });
 
         // V metóde create() scény Game
@@ -374,7 +403,45 @@ export class Game extends Scene
                 }
             } else if(tile && tile.properties.finishLine) {
                 // console.log('Auto je na ceste');
-                console.log("WOOhOOO presie si cielom");
+                if (this.car.canCompleteLap) {
+                    this.car.laps++;
+                    this.car.canCompleteLap = false; // Prevent immediate re-triggering
+                    console.log(`Client: Lap ${this.car.laps} completed!`);
+
+                    // Update the lap counter text display
+                    if (this.lapText) {
+                        this.lapText.setText(`Lap: ${this.car.laps} / ${this.totalLaps}`);
+                    }
+
+                    // --- Notify Server (Optional but Recommended) ---
+                    /*
+                    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+                        this.socket.send(JSON.stringify({ type: 'completedLap', lap: this.car.laps }));
+                    }
+                    */
+
+                    // Check for race finish (client-side check)
+                    if (this.car.laps >= this.totalLaps) {
+                        console.log("Client: Race Finished!");
+                        // Add game end logic here
+                        // Example: Disable controls, show results message
+                        // this.gameState = 'FINISHED';
+                        // this.car.setVelocity(0, 0); // Stop car
+                        // You might want a more formal results screen triggered here
+                        // Send final result to server
+                        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+                            this.socket.send(JSON.stringify({ type: 'raceFinished' }));
+                        }
+                    }
+                } else{
+                    // If the car is NOT on the finish line tile, allow lap completion again.
+                    // NOTE: This simple reset is vulnerable to driving back and forth over
+                    // the line. A better system uses checkpoints around the track.
+                    if (!this.car.canCompleteLap) {
+                        // console.log("Off finish line, can complete lap again."); // Can be spammy
+                        this.car.canCompleteLap = true;
+                    }
+                }
             }
 
             // Update car
