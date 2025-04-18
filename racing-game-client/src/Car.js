@@ -17,14 +17,14 @@ export default class Car extends Phaser.Physics.Matter.Image {
 
         //lap counter
         this.laps = 0;
-        this.canCompleteLap = false;
+        this.lastCheckpointPassed = -1; // Index of the last checkpoint passed (-1 means start/just finished lap)
 
         // Create main body and sensors
         const mainBody = scene.matter.bodies.rectangle(
             x, y,
             this.width * 0.4,
             this.height * 0.4,
-            { label: 'carBody' }
+            { label: 'playerCarBody' }
         );
 
         // Create front and rear sensors
@@ -37,7 +37,7 @@ export default class Car extends Phaser.Physics.Matter.Image {
             sensorHeight,
             {
                 isSensor: true,
-                label: 'frontSensor'
+                label: 'playerFrontSensor'
             }
         );
 
@@ -47,7 +47,7 @@ export default class Car extends Phaser.Physics.Matter.Image {
             sensorHeight,
             {
                 isSensor: true,
-                label: 'rearSensor'
+                label: 'playerRearSensor'
             }
         );
 
@@ -61,30 +61,6 @@ export default class Car extends Phaser.Physics.Matter.Image {
         this.setFixedRotation();
         this.setOrigin(0.5, 0.5);
 
-        // Add collision handler
-        scene.matter.world.on('collisionstart', (event) => {
-            event.pairs.forEach((pair) => {
-                const bodyA = pair.bodyA;
-                const bodyB = pair.bodyB;
-
-                // Check if this car's front sensor hit another car's rear sensor
-                if (bodyA === this.body.parts[1] && bodyB.label === 'rearSensor') {
-                    console.log('This car caused rear-end collision!');
-                    // Dočasne zníž maxSpeed, napríklad na polovicu
-                    this.maxSpeed = this.originalMaxSpeed * 0.5;
-                    // Ak je aktuálna rýchlosť vyššia než nová maxSpeed, uprav ju
-                    if (this.speed > this.maxSpeed) {
-                        this.speed = this.maxSpeed;
-                    }
-
-                    // Obnov maxSpeed po 5 sekundách
-                    this.scene.time.delayedCall(5000, () => {
-                        this.maxSpeed = this.originalMaxSpeed;
-                        console.log('Max speed restored.');
-                    }, null, this);
-                }
-            });
-        });
     }
 
     accelerate() {
@@ -128,6 +104,6 @@ export default class Car extends Phaser.Physics.Matter.Image {
 
     resetLapState() {
         this.laps = 0;
-        this.canCompleteLap = true;
+        this.lastCheckpointPassed = -1;
     }
 }

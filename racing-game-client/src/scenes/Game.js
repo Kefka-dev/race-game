@@ -28,6 +28,10 @@ export class Game extends Scene
         //lapcounter UI
         this.lapText = null;      // Reference to the Phaser Text object for laps
         this.totalLaps = 0;       // Total laps for the race (from settings)
+
+        //checkpoints
+        this.checkpoints = [];        // Array to hold checkpoint body references
+        this.totalCheckpoints = 0;    // Will be set based on defined checkpoints
     }
 
     preload ()
@@ -56,6 +60,33 @@ export class Game extends Scene
         this.tree = new Obstacle(this, 670, 70, 'tree', 0.4);
         this.tree = new Obstacle(this, 865, 190, 'tree', 0.4);
 
+        //Checkpoint setup
+        const checkpointData = [
+            { x: 575, y: 150, width: 130, height: 20 }, // Checkpoint 0
+            { x: 770, y: 150, width: 130, height: 20 }, // Checkpoint 1
+            { x: 970, y: 400, width: 130, height: 20 }, // Checkpoint 2
+            { x: 400, y: 700, width: 20, height: 130 }, // Checkpoint 3
+            { x: 125, y: 200, width: 130, height: 20 }, // Checkpoint 4
+            // Add more checkpoints as needed...
+        ];
+        this.totalCheckpoints = checkpointData.length;
+
+        // --- Create Checkpoint Sensor Bodies ---
+        checkpointData.forEach((data, index) => {
+            const cpBody = this.matter.add.rectangle(data.x, data.y, data.width, data.height, {
+                isSensor: true,    // Makes it non-collidable but detectable
+                isStatic: true,    // Checkpoints don't move
+                label: 'checkpoint' // Label for collision detection
+            });
+
+            // Store the checkpoint's sequence index directly on the body object
+            cpBody.checkpointIndex = index;
+
+            // Store reference if needed elsewhere (like debug draw)
+            this.checkpoints.push(cpBody);
+        });
+        console.log(`Created ${this.totalCheckpoints} checkpoints.`);
+        // --- End Checkpoint Creation ---
 
         //LobbySetup
         // --- Get references to HTML elements ---
@@ -95,7 +126,7 @@ export class Game extends Scene
 
         this.socket.addEventListener('message', (event) => {
             const msg = JSON.parse(event.data);
-            console.log("Received message:", msg); // Debugging
+            // console.log("Received message:", msg); // Debugging
 
             switch (msg.type) {
                 case 'lobbyInfo':
@@ -133,12 +164,10 @@ export class Game extends Scene
 
                     // Create player car NOW
                     this.car = new Car(this, spawnX, spawnY, 'car1');
-                    this.car.body.parts[0].label = 'playerCarBody';
-                    this.car.body.parts[1].label = 'playerFrontSensor';
-                    this.car.body.parts[2].label = 'playerRearSensor';
                     this.car.setRotation(spawnRotation || Math.PI / 2); // Use provided rotation
                     this.car.playerId = this.playerId; // Assign ID if needed on car object
 
+                    console.log('Car parts structure:', this.car.body.parts.map((p, index) => `Index <span class="math-inline">\{index\}\: Label\='</span>{p.label}', ID=${p.id}`));
                     // Enable controls NOW
                     this.cursors = this.input.keyboard.createCursorKeys();
 
@@ -289,6 +318,100 @@ export class Game extends Scene
             if (this.lapText) { this.lapText.destroy(); this.lapText = null; }
         });
 
+
+        // --- Add Matter Collision Listener ---
+        this.matter.world.on('collisionstart', (event) => {
+            event.pairs.forEach((pair) => {
+                const { bodyA, bodyB } = pair;
+                // console.log(`Pair: A='${bodyA.label}', B='${bodyB.label}'`); // Keep for debugging
+
+                // --- Checkpoint Collision Logic ---
+                let carBodyPartForCP = null;
+                let checkpointBody = null;
+
+                // Use the CORRECT index '1' for playerCarBody after the fix
+                if (bodyA.label === 'playerCarBody' && bodyB.label === 'checkpoint') {
+                    carBodyPartForCP = bodyA; checkpointBody = bodyB;
+                } else if (bodyB.label === 'playerCarBody' && bodyA.label === 'checkpoint') {
+                    carBodyPartForCP = bodyB; checkpointBody = bodyA;
+                }
+
+                // Check if it's the player's car main body hitting a checkpoint
+                if (this.gameState === 'RACING' && this.car && carBodyPartForCP && checkpointBody && this.car.body.parts.includes(carBodyPartForCP)) { // Check if part belongs to player car
+                    // Verify it's the main body part (index 1 after fix)
+                    if(this.car.body.parts[1] === carBodyPartForCP){
+                        const checkpointIndex = checkpointBody.checkpointIndex;
+                        const expectedIndex = this.car.lastCheckpointPassed + 1;
+
+                        if (checkpointIndex === expectedIndex) {
+                            this.car.lastCheckpointPassed = checkpointIndex;
+                            console.log(`Client: Passed Checkpoint ${checkpointIndex}`);
+                        } else {
+                            console.log(`Client: Hit Checkpoint ${checkpointIndex} out of order (expected ${expectedIndex}). Ignoring.`);
+                        }
+                    }
+                } // End Checkpoint Logic
+
+                // --- Car-vs-Car Sensor Collision Logic (Moved from Car.js) ---
+                let frontSensorBody = null;
+                let rearSensorBody = null;
+
+                // Check for Front Sensor vs Rear Sensor collision
+                // Uses the LABELS assigned in startGame after the fix
+                if (bodyA.label === 'playerFrontSensor' && bodyB.label === 'playerRearSensor') {
+                    frontSensorBody = bodyA; rearSensorBody = bodyB;
+                } else if (bodyB.label === 'playerFrontSensor' && bodyA.label === 'playerRearSensor') {
+                    frontSensorBody = bodyB; rearSensorBody = bodyA;
+                }
+
+                // If a sensor collision occurred and we are racing
+                if (this.gameState === 'RACING' && frontSensorBody && rearSensorBody) {
+
+                    // Find which car instance owns the front sensor body
+                    let hittingCar = null;
+                    if (this.car && this.car.body.parts.includes(frontSensorBody)) { // Check if it's the main player's car
+                        hittingCar = this.car;
+                    } else { // Check the other cars
+                        for (const otherId in this.otherCars) {
+                            const otherCar = this.otherCars[otherId];
+                            // Important: Check if otherCar and its body exist before accessing parts
+                            if (otherCar && otherCar.body && otherCar.body.parts.includes(frontSensorBody)) {
+                                hittingCar = otherCar;
+                                break;
+                            }
+                        }
+                    }
+
+                    // Apply penalty logic ONLY if it's the local player's car that did the hitting
+                    if (hittingCar && hittingCar === this.car) {
+                        console.log('My car caused rear-end collision!');
+
+                        // Prevent applying penalty multiple times quickly
+                        if (this.car.maxSpeed === this.car.originalMaxSpeed) {
+                            this.car.maxSpeed = this.car.originalMaxSpeed * 0.5;
+                            if (this.car.speed > this.car.maxSpeed) {
+                                this.car.speed = this.car.maxSpeed;
+                            }
+                            console.log('Max speed reduced.');
+
+                            // Restore speed after delay using the scene's timer
+                            this.time.delayedCall(5000, () => {
+                                // Check car still exists before restoring
+                                if (this.car) {
+                                    this.car.maxSpeed = this.car.originalMaxSpeed;
+                                    console.log('Max speed restored.');
+                                }
+                            }, null, this); // 'this' context is the scene
+                        }
+                    }
+                    // Note: We don't apply penalties to otherCars on this client.
+                    // Their state should be determined by their own client or server updates.
+                } // End Car-vs-Car Logic
+
+            }); // End event.pairs.forEach
+        }); // End this.matter.world.on
+
+
         // V metóde create() scény Game
         this.debugGraphics = this.add.graphics();
         this.debugGraphics.visible = false; // Skryjeme grafiku na začiatku 
@@ -401,48 +524,34 @@ export class Game extends Scene
                 if (this.car.speed > 2 ){
                     this.car.speed = 2;
                 }
-            } else if(tile && tile.properties.finishLine) {
-                // console.log('Auto je na ceste');
-                if (this.car.canCompleteLap) {
+            }
+            if (tile && tile.properties.finishLine) {
+                // Check if the LAST checkpoint was the most recently passed one
+                if (this.car.lastCheckpointPassed === this.totalCheckpoints - 1) {
+                    // Valid lap completion!
                     this.car.laps++;
-                    this.car.canCompleteLap = false; // Prevent immediate re-triggering
+                    this.car.lastCheckpointPassed = -1; // Reset checkpoint progress for the new lap
                     console.log(`Client: Lap ${this.car.laps} completed!`);
 
-                    // Update the lap counter text display
-                    if (this.lapText) {
-                        this.lapText.setText(`Lap: ${this.car.laps} / ${this.totalLaps}`);
+                    // Update UI (Using HTML element from previous example)
+                    if (this.lapText) { // Check the correct variable (this.lapText)
+                        this.lapText.setText(`Lap: ${this.car.laps} / ${this.totalLaps}`); // Use the setText() method
                     }
 
-                    // --- Notify Server (Optional but Recommended) ---
-                    /*
-                    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-                        this.socket.send(JSON.stringify({ type: 'completedLap', lap: this.car.laps }));
-                    }
-                    */
-
-                    // Check for race finish (client-side check)
+                    // Check for race finish
                     if (this.car.laps >= this.totalLaps) {
                         console.log("Client: Race Finished!");
-                        // Add game end logic here
-                        // Example: Disable controls, show results message
-                        // this.gameState = 'FINISHED';
-                        // this.car.setVelocity(0, 0); // Stop car
-                        // You might want a more formal results screen triggered here
-                        // Send final result to server
+                        this.gameState = 'FINISHED'; // Or similar state
+                        // ... (Add more finish logic: stop car, show results, notify server)
                         if (this.socket && this.socket.readyState === WebSocket.OPEN) {
                             this.socket.send(JSON.stringify({ type: 'raceFinished' }));
                         }
                     }
-                } else{
-                    // If the car is NOT on the finish line tile, allow lap completion again.
-                    // NOTE: This simple reset is vulnerable to driving back and forth over
-                    // the line. A better system uses checkpoints around the track.
-                    if (!this.car.canCompleteLap) {
-                        // console.log("Off finish line, can complete lap again."); // Can be spammy
-                        this.car.canCompleteLap = true;
-                    }
+                    // NOTE: No 'canCompleteLap' needed anymore
                 }
+                // If last checkpoint wasn't passed, crossing the finish line does nothing
             }
+
 
             // Update car
             this.car.update(delta);
@@ -457,23 +566,39 @@ export class Game extends Scene
                 }));
             }
 
+            // --- Debug Graphics Drawing ---
             if (this.debugGraphics.visible) {
                 this.debugGraphics.clear();
-                this.debugGraphics.lineStyle(1, 0x00ff00);
+
+                // Draw Car Hitbox Parts
+                this.debugGraphics.lineStyle(1, 0x00ff00); // Green for car parts
                 this.car.body.parts.forEach(part => {
-                    // ... (rest of debug drawing logic)
+                    // Skip the main compound body itself if desired, draw only parts
+                    if (part === this.car.body) return;
                     this.debugGraphics.beginPath();
                     part.vertices.forEach((vertex, index) => {
-                        if (index === 0) {
-                            this.debugGraphics.moveTo(vertex.x, vertex.y);
-                        } else {
-                            this.debugGraphics.lineTo(vertex.x, vertex.y);
-                        }
+                        if (index === 0) { this.debugGraphics.moveTo(vertex.x, vertex.y); }
+                        else { this.debugGraphics.lineTo(vertex.x, vertex.y); }
                     });
                     this.debugGraphics.closePath();
                     this.debugGraphics.strokePath();
                 });
-            }
+
+                // Draw Checkpoints
+                this.debugGraphics.lineStyle(2, 0xff00ff, 0.7); // Magenta, slightly transparent for checkpoints
+                this.checkpoints.forEach(cpBody => {
+                    this.debugGraphics.strokeRect(
+                        cpBody.bounds.min.x,
+                        cpBody.bounds.min.y,
+                        cpBody.bounds.max.x - cpBody.bounds.min.x,
+                        cpBody.bounds.max.y - cpBody.bounds.min.y
+                    );
+                    // Optionally draw index number near checkpoint
+                    this.debugGraphics.fillStyle(0xffffff, 1);
+                    // this.debugGraphics.fillText(cpBody.checkpointIndex, cpBody.position.x, cpBody.position.y); // Requires font settings
+                });
+
+            } // End if debug visible
         } else {
             // What happens while WAITING? Maybe camera panning, displaying player list?
             // For now, nothing happens.
@@ -489,6 +614,10 @@ export class Game extends Scene
 
         // If debug is active, clear it even if waiting, otherwise old lines persist
         if (!this.car && this.debugGraphics.visible) {
+            this.debugGraphics.clear();
+        }
+        // Clear debug if needed when not racing but visible
+        if (this.gameState !== 'RACING' && this.debugGraphics.visible) {
             this.debugGraphics.clear();
         }
     }
