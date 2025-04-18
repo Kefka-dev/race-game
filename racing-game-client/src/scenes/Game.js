@@ -14,6 +14,16 @@ export class Game extends Scene
         this.car = null; // Initialize car to null
         this.gameState = 'WAITING'; // Add game state ('WAITING', 'RACING')
         this.cursors = null; // Initialize cursors later
+
+        this.isHost = false; // Flag to check if this client is the host
+        this.lobbyOverlay = null; // Reference to the overlay div
+        this.playerListElement = null; // Reference to the <ul> element
+        this.hostControls = null; // Reference to host controls div
+        this.guestInfo = null; // Reference to guest info div
+        this.roundsInput = null; // Reference to rounds input
+        this.startButton = null; // Reference to start button
+        this.guestRoundsDisplay = null; // Ref to span for guest rounds
+        this.startErrorElement = null; // Ref to error paragraph
     }
 
     preload ()
@@ -43,12 +53,40 @@ export class Game extends Scene
         this.tree = new Obstacle(this, 865, 190, 'tree', 0.4);
 
 
+        //LobbySetup
+        // --- Get references to HTML elements ---
+        this.lobbyOverlay = document.getElementById('lobbyOverlay');
+        this.playerListElement = document.getElementById('playerList');
+        this.hostControls = document.getElementById('hostControls');
+        this.guestInfo = document.getElementById('guestInfo');
+        this.roundsInput = document.getElementById('roundsInput');
+        this.startButton = document.getElementById('startButton');
+        this.guestRoundsDisplay = document.getElementById('guestRoundsDisplay');
+        this.startErrorElement = document.getElementById('startError');
+
+        // --- Add Event Listeners for Host Controls ---
+        this.roundsInput.addEventListener('change', () => {
+            if (this.isHost && this.socket && this.socket.readyState === WebSocket.OPEN) {
+                const rounds = parseInt(this.roundsInput.value, 10);
+                this.socket.send(JSON.stringify({ type: 'setRounds', rounds: rounds }));
+            }
+        });
+
+        this.startButton.addEventListener('click', () => {
+            if (this.isHost && this.socket && this.socket.readyState === WebSocket.OPEN) {
+                this.startErrorElement.textContent = ''; // Clear previous errors
+                console.log("Requesting game start...");
+                this.socket.send(JSON.stringify({ type: 'requestStartGame' }));
+            }
+        });
+
         //websocket setup
         this.socket = new WebSocket('wss://node103.webte.fei.stuba.sk/game')
 
 
         this.socket.addEventListener('open', () => {
             console.log('Connected to server!');
+            this.showLobby();
         });
 
         this.socket.addEventListener('message', (event) => {
@@ -56,23 +94,42 @@ export class Game extends Scene
             console.log("Received message:", msg); // Debugging
 
             switch (msg.type) {
-                case 'assignId':
+                case 'lobbyInfo':
                     this.playerId = msg.playerId;
-                    console.log(`Assigned Player ID: ${this.playerId}`);
+                    this.isHost = msg.isHost;
+                    this.updatePlayerList(msg.players); // players is now an object { id: name, ... }
+                    this.updateLobbySettings(msg.settings); // e.g., { rounds: 3 }
+                    this.updateLobbyVisibility(); // Show/hide host controls
+                    console.log(`Assigned Player ID: ${this.playerId}, Is Host: ${this.isHost}`);
                     break;
 
                 case 'startGame':
                     console.log("--- Game Start Signal Received ---");
+                    this.hideLobby(); // Hide lobby overlay
                     this.gameState = 'RACING';
-                    // Clear "Waiting" message if you added one
-                    // ...
+
+                    // --- FIX: Get THIS player's spawn data from initialPlayers ---
+                    const myPlayerData = msg.initialPlayers[this.playerId]; // Look up using YOUR ID
+
+                    if (!myPlayerData) {
+                        // Error handling: This shouldn't happen if the server is correct
+                        console.error(`FATAL: My player data (ID: ${this.playerId}) not found in startGame message!`, msg);
+                        // Perhaps force disconnect or show an error
+                        this.socket.close();
+                        return;
+                    }
+                    // Use the data found for your player ID
+                    const spawnX = myPlayerData.x;
+                    const spawnY = myPlayerData.y;
+                    const spawnRotation = myPlayerData.rotation;
+                    // --- End of FIX ---
 
                     // Create player car NOW
-                    this.car = new Car(this, msg.spawnX, msg.spawnY, 'car1');
+                    this.car = new Car(this, spawnX, spawnY, 'car1');
                     this.car.body.parts[0].label = 'playerCarBody';
                     this.car.body.parts[1].label = 'playerFrontSensor';
                     this.car.body.parts[2].label = 'playerRearSensor';
-                    this.car.setRotation(msg.spawnRotation || Math.PI / 2); // Use provided rotation
+                    this.car.setRotation(spawnRotation || Math.PI / 2); // Use provided rotation
                     this.car.playerId = this.playerId; // Assign ID if needed on car object
 
                     // Enable controls NOW
@@ -89,6 +146,61 @@ export class Game extends Scene
                                 this.otherCars[id].playerId = id; // Assign ID if needed
                             }
                         }
+                    }
+                    break;
+
+                case 'playerJoined': // Optional: For lobby UI updates
+                    // FIX: Access data nested within msg.player
+                    if (msg.player && msg.player.id !== undefined && msg.player.name !== undefined) {
+                        const joinedPlayerId = msg.player.id;
+                        const joinedPlayerName = msg.player.name;
+
+                        console.log(`Player joined event: ID=${joinedPlayerId}, Name=${joinedPlayerName}`);
+
+                        //Check if player already exists in the list
+                        const existingPlayerLi = this.playerListElement.querySelector(`li[data-player-id="${joinedPlayerId}"]`);
+
+                        if (!existingPlayerLi) {
+                            console.log(`Adding player ${joinedPlayerId} to list.`);
+                            this.addPlayerToList(joinedPlayerId, joinedPlayerName);
+                        } else {
+                            // Player might already be in the list if this client just joined
+                            // and received lobbyInfo followed by their own playerJoined event.
+                            console.log(`Player ${joinedPlayerId} already in list, skipping add.`);
+                        }
+
+                    } else {
+                        console.error("Received malformed playerJoined message:", msg);
+                    }
+                    break;
+
+                case 'playerDisconnected':
+                    console.log(`Player ${msg.playerId} disconnected`);
+                    this.removePlayerFromList(msg.playerId);
+                    // Also handle removing the car if the game started
+                    const car = this.otherCars[msg.playerId];
+                    if (car) {
+                        car.destroy();
+                        delete this.otherCars[msg.playerId];
+                    }
+                    break;
+                // New: Update settings display if host changes them
+                case 'updateLobbySettings':
+                    this.updateLobbySettings(msg.settings);
+                    break;
+
+                // New: Handle host change if current host leaves
+                case 'newHost':
+                    this.isHost = (this.playerId === msg.hostId);
+                    this.updateLobbyVisibility();
+                    this.updatePlayerListHostIndicator(msg.hostId); // Add visual indicator to list
+                    console.log(`New host is Player ${msg.hostId}. Am I host? ${this.isHost}`);
+                    break;
+
+                // New: Handle start game error (e.g., not enough players)
+                case 'startGameError':
+                    if (this.isHost) {
+                        this.startErrorElement.textContent = msg.message;
                     }
                     break;
 
@@ -113,30 +225,22 @@ export class Game extends Scene
                     }
                     break;
 
-                case 'playerDisconnected':
-                    console.log(`Player ${msg.playerId} disconnected`);
-                    const car = this.otherCars[msg.playerId];
-                    if (car) {
-                        car.destroy();
-                        delete this.otherCars[msg.playerId];
-                    }
-                    break;
-
-                case 'playerJoined': // Optional: For lobby UI updates
-                    console.log(`Player ${msg.playerId} joined the lobby.`);
-                    // Update UI if you have one
-                    break;
-
                 // Add default case for unexpected messages
                 default:
                     console.log(`Unhandled message type: ${msg.type}`);
             }
         });
 
+        // --- WebSocket Close/Error Handling ---
         this.socket.addEventListener('close', () => {
             console.log('Disconnected from server.');
-            this.gameState = 'WAITING'; // Or handle disconnect state
-            // Maybe show a "Disconnected" message and disable controls
+            this.gameState = 'WAITING';
+            this.showLobby(); // Show lobby overlay on disconnect
+            // Reset player list, host status etc.
+            this.playerListElement.innerHTML = '';
+            this.isHost = false;
+            this.updateLobbyVisibility();
+            // Destroy cars if they exist
             if (this.car) this.car.destroy();
             this.car = null;
             Object.values(this.otherCars).forEach(car => car.destroy());
@@ -145,7 +249,15 @@ export class Game extends Scene
 
         this.socket.addEventListener('error', (error) => {
             console.error('WebSocket Error:', error);
-            // Handle error state similar to close
+            // Similar cleanup as 'close'
+            this.showLobby();
+            this.playerListElement.innerHTML = '';
+            this.isHost = false;
+            this.updateLobbyVisibility();
+            if (this.car) this.car.destroy();
+            this.car = null;
+            Object.values(this.otherCars).forEach(car => car.destroy());
+            this.otherCars = {};
         });
 
         // V metóde create() scény Game
@@ -155,6 +267,84 @@ export class Game extends Scene
             this.debugGraphics.visible = !this.debugGraphics.visible;
         });
     }
+
+    // --- Helper methods for Lobby UI ---
+
+    showLobby() {
+        if (this.lobbyOverlay) this.lobbyOverlay.style.display = 'flex';
+        // Don't automatically call updateLobbyVisibility here, wait for lobbyInfo
+    }
+
+    hideLobby() {
+        if (this.lobbyOverlay) this.lobbyOverlay.style.display = 'none';
+    }
+
+    updateLobbyVisibility() {
+        if (!this.hostControls || !this.guestInfo) return; // Ensure elements exist
+        if (this.isHost) {
+            this.hostControls.style.display = 'block';
+            this.guestInfo.style.display = 'none';
+        } else {
+            this.hostControls.style.display = 'none';
+            this.guestInfo.style.display = 'block';
+        }
+    }
+
+// Updates the entire player list based on data from server { id: name, ... }
+    updatePlayerList(players) {
+        if (!this.playerListElement) return;
+        this.playerListElement.innerHTML = ''; // Clear existing list
+        for (const [id, name] of Object.entries(players)) {
+            this.addPlayerToList(id, name);
+        }
+        // Optionally highlight the host after rebuilding the list
+        // this.updatePlayerListHostIndicator(currentHostIdFromServer);
+    }
+
+    addPlayerToList(playerId, playerName) {
+        if (!this.playerListElement) return;
+        const li = document.createElement('li');
+        li.textContent = `${playerName} (ID: ${playerId})`; // Display name and ID
+        li.setAttribute('data-player-id', playerId); // Store ID for removal
+        this.playerListElement.appendChild(li);
+    }
+
+    removePlayerFromList(playerId) {
+        if (!this.playerListElement) return;
+        const items = this.playerListElement.querySelectorAll(`li[data-player-id="${playerId}"]`);
+        items.forEach(item => item.remove());
+    }
+
+    updateLobbySettings(settings) {
+        if (settings.rounds !== undefined) {
+            if (this.isHost && this.roundsInput) {
+                this.roundsInput.value = settings.rounds;
+            }
+            if (!this.isHost && this.guestRoundsDisplay) {
+                this.guestRoundsDisplay.textContent = settings.rounds;
+            }
+        }
+        // Update other settings if added
+    }
+
+    // Optional: Visually indicate who the host is in the list
+    updatePlayerListHostIndicator(hostId) {
+        if (!this.playerListElement) return;
+        const items = this.playerListElement.querySelectorAll('li');
+        items.forEach(item => {
+            const id = item.getAttribute('data-player-id');
+            if (id === String(hostId)) { // Compare as string potentially
+                item.textContent += ' (Host)'; // Append indicator
+                item.style.fontWeight = 'bold';
+            } else {
+                // Remove indicator if present from previous host
+                item.textContent = item.textContent.replace(' (Host)', '');
+                item.style.fontWeight = 'normal';
+            }
+        });
+    }
+    // --- End of Helper methods for Lobby UI ---
+
     update (time, delta)
     {
         if (this.gameState === 'RACING' && this.car && this.cursors) {

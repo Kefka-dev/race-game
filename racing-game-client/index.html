@@ -6,10 +6,81 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="/style.css">
     <title>Phaser - Template</title>
+    <style>
+        #lobbyOverlay {
+            position: absolute; /* Or fixed */
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8); /* Semi-transparent background */
+            color: white;
+            display: none; /* Use flexbox for centering */
+            justify-content: center;
+            align-items: center;
+            z-index: 100; /* Ensure it's above the Phaser canvas */
+            font-family: sans-serif;
+        }
+
+        .lobby-content {
+            background-color: #333;
+            padding: 20px 40px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+        }
+
+        #playerList {
+            list-style: none;
+            padding: 0;
+            margin-top: 5px;
+            max-height: 150px;
+            overflow-y: auto;
+            text-align: left;
+            border: 1px solid #555;
+            padding: 10px;
+            margin-bottom: 15px;
+        }
+
+        #playerList li {
+            padding: 2px 0;
+        }
+
+        #hostControls label,
+        #hostControls input,
+        #hostControls button {
+            margin: 5px;
+        }
+
+        #hostControls input {
+            width: 50px;
+        }
+    </style>
 </head>
 
 <body>
     <div id="app">
+        <div id="lobbyOverlay">
+            <div class="lobby-content">
+                <h2>Game Lobby</h2>
+                <p>Waiting for players...</p>
+                <div id="playerListContainer">
+                    <strong>Players:</strong>
+                    <ul id="playerList">
+                    </ul>
+                </div>
+                <div id="hostControls" style="display: none;"> <hr>
+                    <label for="roundsInput">Number of Rounds:</label>
+                    <input type="number" id="roundsInput" value="3" min="1" max="10">
+                    <button id="startButton">Start Game</button>
+                    <p id="startError" style="color: red;"></p>
+                </div>
+                <div id="guestInfo" style="display: none;"> <hr>
+                    <p>Waiting for the host to start the game.</p>
+                    <p>Rounds: <span id="guestRoundsDisplay">3</span></p>
+                </div>
+            </div>
+        </div>
         <div id="game-container"></div>
     </div>
     <script type="module" src="src/main.js"></script>
