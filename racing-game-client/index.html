@@ -7,82 +7,80 @@
     <link rel="stylesheet" href="/style.css">
     <title>Phaser - Template</title>
     <style>
-        #lobbyOverlay {
-            position: absolute; /* Or fixed */
+        .overlay {
+            position: fixed; /* Or absolute */
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0, 0, 0, 0.8); /* Semi-transparent background */
-            color: white;
+            background-color: rgba(0, 0, 0, 0.7); /* Semi-transparent background */
             display: none; /* Use flexbox for centering */
             justify-content: center;
             align-items: center;
-            z-index: 100; /* Ensure it's above the Phaser canvas */
+            z-index: 100; /* Ensure it's above the canvas */
+            color: white;
             font-family: sans-serif;
         }
 
-        .lobby-content {
+        .overlay-content {
             background-color: #333;
-            padding: 20px 40px;
+            padding: 20px;
             border-radius: 8px;
             text-align: center;
-            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+            min-width: 300px;
         }
 
-        #playerList {
-            list-style: none;
-            padding: 0;
-            margin-top: 5px;
-            max-height: 150px;
-            overflow-y: auto;
+        #resultsOverlay ol {
+            list-style-position: inside; /* Numbers inside the list item block */
             text-align: left;
-            border: 1px solid #555;
-            padding: 10px;
-            margin-bottom: 15px;
+            padding-left: 0; /* Adjust as needed */
         }
 
-        #playerList li {
-            padding: 2px 0;
+        #resultsOverlay li {
+            margin-bottom: 8px; /* Spacing between results */
+            font-size: 1.1em;
         }
-
-        #hostControls label,
-        #hostControls input,
-        #hostControls button {
-            margin: 5px;
-        }
-
-        #hostControls input {
-            width: 50px;
+        #backToLobbyButton {
+            margin-top: 20px;
+            padding: 10px 15px;
+            font-size: 1em;
         }
     </style>
 </head>
 
 <body>
     <div id="app">
-        <div id="lobbyOverlay">
-            <div class="lobby-content">
+        <div id="lobbyOverlay" class="overlay">
+            <div class="overlay-content">
                 <h2>Game Lobby</h2>
-                <p>Waiting for players...</p>
-                <div id="playerListContainer">
-                    <strong>Players:</strong>
-                    <ul id="playerList">
-                    </ul>
-                </div>
-                <div id="hostControls" style="display: none;"> <hr>
-                    <label for="roundsInput">Number of Rounds:</label>
+                <p>Players:</p>
+                <ul id="playerList">
+                </ul>
+                <div id="hostControls" style="display: none;">
+                    <h3>Host Settings</h3>
+                    <label for="roundsInput">Rounds:</label>
                     <input type="number" id="roundsInput" value="3" min="1" max="10">
                     <button id="startButton">Start Game</button>
                     <p id="startError" style="color: red;"></p>
                 </div>
-                <div id="guestInfo" style="display: none;"> <hr>
-                    <p>Waiting for the host to start the game.</p>
+                <div id="guestInfo" style="display: none;">
+                    <p>Waiting for host to start the game...</p>
                     <p>Rounds: <span id="guestRoundsDisplay">3</span></p>
                 </div>
             </div>
         </div>
+        <div id="resultsOverlay" class="overlay" style="display: none;">
+            <div class="overlay-content">
+                <h2>Race Results</h2>
+                <ol id="resultsList">
+                </ol>
+                <button id="backToLobbyButton">Back to Lobby</button>
+            </div>
+        </div>
         <div id="game-container"></div>
     </div>
+
+
     <script type="module" src="src/main.js"></script>
 </body>
 </html>

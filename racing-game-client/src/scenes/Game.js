@@ -29,6 +29,16 @@ export class Game extends Scene
         this.lapText = null;      // Reference to the Phaser Text object for laps
         this.totalLaps = 0;       // Total laps for the race (from settings)
 
+        // Timer UI
+        this.timerText = null;     // Phaser Text for timer
+        this.raceStartTime = 0;    // Client-side record of race start time
+        this.elapsedRaceTime = 0;  // Track elapsed time in ms
+
+        // Results UI
+        this.resultsOverlay = null; // Reference to results overlay div
+        this.resultsListElement = null; // Reference to <ul> or <ol> for results
+        this.backToLobbyButton = null; // <<< Reference to the button
+
         //checkpoints
         this.checkpoints = [];        // Array to hold checkpoint body references
         this.totalCheckpoints = 0;    // Will be set based on defined checkpoints
@@ -99,6 +109,11 @@ export class Game extends Scene
         this.guestRoundsDisplay = document.getElementById('guestRoundsDisplay');
         this.startErrorElement = document.getElementById('startError');
 
+        //results ui
+        this.resultsOverlay = document.getElementById('resultsOverlay'); // Get results overlay
+        this.resultsListElement = document.getElementById('resultsList'); // Get results list
+        this.backToLobbyButton = document.getElementById('backToLobbyButton'); // <<< Get button element
+
         // --- Add Event Listeners for Host Controls ---
         this.roundsInput.addEventListener('change', () => {
             if (this.isHost && this.socket && this.socket.readyState === WebSocket.OPEN) {
@@ -115,6 +130,31 @@ export class Game extends Scene
             }
         });
 
+        // <<< Add listener for the Back to Lobby button >>>
+        if (this.backToLobbyButton) { // Check if the button exists
+            this.backToLobbyButton.addEventListener('click', () => {
+                console.log("Back to Lobby button clicked.");
+                // Check connection and send request to server
+                if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+                    // Only send if not already in WAITING state (prevents spamming)
+                    if (this.gameState !== 'WAITING') {
+                        console.log("Sending requestReturnToLobby to server...");
+                        this.socket.send(JSON.stringify({ type: 'requestReturnToLobby' }));
+                    } else {
+                        console.log("Already in WAITING state or returning.");
+                    }
+                } else {
+                    console.error("Cannot return to lobby: WebSocket not connected.");
+                    // Fallback: Force UI reset locally if disconnected
+                    this.hideResults();
+                    this.showLobby(); // Or potentially a disconnected message
+                    this.resetGameElements();
+                }
+            });
+        } else {
+            console.warn("BackToLobbyButton element not found in HTML.");
+        }
+
         //websocket setup
         this.socket = new WebSocket('wss://node103.webte.fei.stuba.sk/game')
 
@@ -122,6 +162,7 @@ export class Game extends Scene
         this.socket.addEventListener('open', () => {
             console.log('Connected to server!');
             this.showLobby();
+            this.hideResults(); // Ensure results are hidden
         });
 
         this.socket.addEventListener('message', (event) => {
@@ -130,18 +171,31 @@ export class Game extends Scene
 
             switch (msg.type) {
                 case 'lobbyInfo':
+                    this.hideResults(); // Ensure results are hidden when lobby info arrives
+                    this.hideGameUI(); // Ensure game UI is hidden too
+
                     this.playerId = msg.playerId;
                     this.isHost = msg.isHost;
                     this.updatePlayerList(msg.players); // players is now an object { id: name, ... }
                     this.updateLobbySettings(msg.settings); // e.g., { rounds: 3 }
                     this.updateLobbyVisibility(); // Show/hide host controls
                     console.log(`Assigned Player ID: ${this.playerId}, Is Host: ${this.isHost}`);
+                    if (this.gameState !== 'WAITING') {
+                        console.log("Received lobbyInfo, setting gameState to WAITING");
+                        this.gameState = 'WAITING';
+                        // We might need more cleanup here if coming from RACING/RESULTS unexpectedly
+                        this.resetGameElements(); // Ensure cars etc are cleared
+                    }
+                    this.showLobby();
                     break;
 
                 case 'startGame':
                     console.log("--- Game Start Signal Received ---");
                     this.hideLobby(); // Hide lobby overlay
+                    this.hideResults(); // Ensure results are hidden
                     this.gameState = 'RACING';
+                    this.raceStartTime = msg.startTime || Date.now(); // Use server start time or fallback
+                    this.elapsedRaceTime = 0; // Reset elapsed time
 
                     // --- FIX: Get THIS player's spawn data from initialPlayers ---
                     const myPlayerData = msg.initialPlayers[this.playerId]; // Look up using YOUR ID
@@ -202,6 +256,27 @@ export class Game extends Scene
                     )
                         .setScrollFactor(0) // Makes it stick to the camera (HUD)
                         .setDepth(10); // Ensure it's drawn on top
+
+
+                    // --- Initialize Timer UI ---
+                    if (this.timerText) {
+                        this.timerText.destroy(); // Destroy previous if exists
+                    }
+                    this.timerText = this.add.text(
+                        this.sys.game.config.width - 10, 10, // Position top-right
+                        'Time: 00:00:000',
+                        {
+                            fontSize: '24px',
+                            fill: '#ffffff',
+                            stroke: '#000000',
+                            strokeThickness: 4,
+                            align: 'right' // Align text to the right
+                        }
+                    )
+                        .setOrigin(1, 0) // Set origin to top-right
+                        .setScrollFactor(0)
+                        .setDepth(10)
+                        .setVisible(true); // Make visible
 
                     break;
 
@@ -281,6 +356,22 @@ export class Game extends Scene
                     }
                     break;
 
+                case 'showResults':
+                    console.log("--- Show Results Signal Received ---", msg.results);
+                    this.gameState = 'RESULTS'; // Set state
+                    this.hideGameUI(); // Hide lap counter, timer
+                    this.populateResults(msg.results); // Populate HTML
+                    this.showResults(); // Show the HTML overlay
+                    // Optionally stop car movement, etc.
+                    if (this.car) {
+                        // Example: Disable input or stop physics if needed
+                        // this.car.body.setVelocity(0, 0); // Stop car instantly
+                        this.car.setActive(false); // Stop updates/physics interaction
+                    }
+                    this.cursors = null; // Disable controls
+                    break;
+
+
                 // Add default case for unexpected messages
                 default:
                     console.log(`Unhandled message type: ${msg.type}`);
@@ -292,6 +383,8 @@ export class Game extends Scene
             console.log('Disconnected from server.');
             this.gameState = 'WAITING';
             this.showLobby(); // Show lobby overlay on disconnect
+            this.hideResults(); // Hide results on disconnect
+            this.hideGameUI(); // Hide game UI
             // Reset player list, host status etc.
             this.playerListElement.innerHTML = '';
             this.isHost = false;
@@ -302,12 +395,16 @@ export class Game extends Scene
             Object.values(this.otherCars).forEach(car => car.destroy());
             this.otherCars = {};
             if (this.lapText) { this.lapText.destroy(); this.lapText = null; } //clean up text
+            this.resetGameElements();
         });
 
         this.socket.addEventListener('error', (error) => {
             console.error('WebSocket Error:', error);
             // Similar cleanup as 'close'
+            this.gameState = 'WAITING';
             this.showLobby();
+            this.hideResults();
+            this.hideGameUI();
             this.playerListElement.innerHTML = '';
             this.isHost = false;
             this.updateLobbyVisibility();
@@ -316,6 +413,7 @@ export class Game extends Scene
             Object.values(this.otherCars).forEach(car => car.destroy());
             this.otherCars = {};
             if (this.lapText) { this.lapText.destroy(); this.lapText = null; }
+            this.resetGameElements();
         });
 
 
@@ -442,6 +540,67 @@ export class Game extends Scene
         }
     }
 
+    showResults() {
+        if (this.resultsOverlay) this.resultsOverlay.style.display = 'flex';
+    }
+
+    hideResults() {
+        if (this.resultsOverlay) this.resultsOverlay.style.display = 'none';
+    }
+
+    // Helper to hide in-game Phaser UI
+    hideGameUI() {
+        if (this.lapText) this.lapText.setVisible(false);
+        if (this.timerText) this.timerText.setVisible(false);
+    }
+
+    // Helper to populate the results list in HTML
+    populateResults(resultsData) {
+        if (!this.resultsListElement) return;
+        this.resultsListElement.innerHTML = ''; // Clear previous results
+
+        resultsData.forEach((playerResult, index) => {
+            const li = document.createElement('li');
+            const place = index + 1;
+            let timeString = "DNF"; // Default to Did Not Finish
+
+            if (playerResult.time !== null) {
+                timeString = this.formatTime(playerResult.time);
+            }
+
+            li.textContent = `${place}. ${playerResult.name} - ${timeString}`;
+            // You could add classes for styling:
+            // li.classList.add('result-item');
+            // if (playerResult.id === this.playerId) li.classList.add('result-self');
+            this.resultsListElement.appendChild(li);
+        });
+    }
+
+    // Helper to format milliseconds into MM:SS:ms
+    formatTime(ms) {
+        if (ms === null || ms === undefined) return "DNF";
+        const totalSeconds = Math.floor(ms / 1000);
+        const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+        const seconds = (totalSeconds % 60).toString().padStart(2, '0');
+        const milliseconds = (ms % 1000).toString().padStart(3, '0');
+        return `${minutes}:${seconds}:${milliseconds}`;
+    }
+
+    // Helper to reset game elements on disconnect/error/game end
+    resetGameElements() {
+        if (this.car) this.car.destroy();
+        this.car = null;
+        Object.values(this.otherCars).forEach(car => car.destroy());
+        this.otherCars = {};
+        if (this.lapText) { this.lapText.destroy(); this.lapText = null; }
+        if (this.timerText) { this.timerText.destroy(); this.timerText = null; }
+        this.gameState = 'WAITING';
+        this.totalLaps = 0;
+        this.raceStartTime = 0;
+        this.elapsedRaceTime = 0;
+        // Don't clear lobby elements here, manage separately
+    }
+
 // Updates the entire player list based on data from server { id: name, ... }
     updatePlayerList(players) {
         if (!this.playerListElement) return;
@@ -500,6 +659,15 @@ export class Game extends Scene
     update (time, delta)
     {
         if (this.gameState === 'RACING' && this.car && this.cursors) {
+
+            // --- Timer Update ---
+            if (this.raceStartTime > 0) {
+                this.elapsedRaceTime = Date.now() - this.raceStartTime;
+                if (this.timerText) {
+                    this.timerText.setText(`Time: ${this.formatTime(this.elapsedRaceTime)}`);
+                }
+            }
+
             // Car movement
             if (this.cursors.up.isDown) {
                 this.car.accelerate();
@@ -526,31 +694,28 @@ export class Game extends Scene
                 }
             }
             if (tile && tile.properties.finishLine) {
-                // Check if the LAST checkpoint was the most recently passed one
                 if (this.car.lastCheckpointPassed === this.totalCheckpoints - 1) {
-                    // Valid lap completion!
                     this.car.laps++;
-                    this.car.lastCheckpointPassed = -1; // Reset checkpoint progress for the new lap
+                    this.car.lastCheckpointPassed = -1;
                     console.log(`Client: Lap ${this.car.laps} completed!`);
 
-                    // Update UI (Using HTML element from previous example)
-                    if (this.lapText) { // Check the correct variable (this.lapText)
-                        this.lapText.setText(`Lap: ${this.car.laps} / ${this.totalLaps}`); // Use the setText() method
+                    if (this.lapText) {
+                        this.lapText.setText(`Lap: ${this.car.laps} / ${this.totalLaps}`);
                     }
 
-                    // Check for race finish
+                    // --- Check for Race Finish ---
                     if (this.car.laps >= this.totalLaps) {
-                        console.log("Client: Race Finished!");
-                        this.gameState = 'FINISHED'; // Or similar state
-                        // ... (Add more finish logic: stop car, show results, notify server)
+                        console.log("Client: Race Finished! Notifying server.");
+                        // Don't change gameState here, wait for server's showResults
+                        // Just send the notification
                         if (this.socket && this.socket.readyState === WebSocket.OPEN) {
                             this.socket.send(JSON.stringify({ type: 'raceFinished' }));
                         }
+                        // Optionally disable controls immediately for responsiveness
+                        // this.cursors = null;
                     }
-                    // NOTE: No 'canCompleteLap' needed anymore
                 }
-                // If last checkpoint wasn't passed, crossing the finish line does nothing
-            }
+            } // End finish line check
 
 
             // Update car

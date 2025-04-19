@@ -17,6 +17,10 @@ let gameSettings = {
     rounds: 3
 }
 
+let raceStartTime = null; // Timestamp when the race started
+let playerFinishTimes = {}; // { playerId: finishTimestamp, ... }
+let finishedPlayers = new Set(); // Keep track of who finished
+
 const assignedSpawnPoints = new Map(); // Track which client ID has which spawn point index
 
 function getNextAvailableSpawnPointIndex() {
@@ -100,6 +104,9 @@ function startGame(starterId) {
     console.log(`--- Game Start requested by Host ${starterId} ---`);
     gameState = 'RACING';
     assignedSpawnPoints.clear(); // Clear previous assignments if any
+    raceStartTime = Date.now(); // Record start time
+    playerFinishTimes = {};     // Clear previous times
+    finishedPlayers.clear();   // Clear finished players set
 
     const initialPlayerData = {};
 
@@ -124,33 +131,69 @@ function startGame(starterId) {
     broadcast({
         type: 'startGame',
         initialPlayers: initialPlayerData, // Send everyone's starting state keyed by ID
-        settings: gameSettings // Send final settings used for the game
-        // Note: The client receiving this message already knows its *own* spawn point
-        // from the assignment loop above, but we need to send all initial player data.
-        // We can tailor the message per client if needed, but broadcasting is simpler.
-        // Let's adjust client to grab its specific spawn from initialPlayers using its own ID.
+        settings: gameSettings, // Send final settings used for the game
+        startTime: raceStartTime
     });
 
-
-    // Send specific spawn point info redundant? Maybe not needed if client uses initialPlayers
-    /*
-    for (const [idStr, player] of Object.entries(players)) {
-         const id = parseInt(idStr);
-         const spawnIndex = player.spawnPointIndex;
-         const spawnPoint = spawnPoints[spawnIndex];
-
-         player.ws.send(JSON.stringify({
-             type: 'startGame',
-             playerId: id, // Keep sending player ID for self-identification
-             spawnX: spawnPoint.x,
-             spawnY: spawnPoint.y,
-             spawnRotation: spawnPoint.rotation,
-             initialPlayers: initialPlayerData,
-             settings: gameSettings
-         }));
-    }
-    */
+    console.log("Race started at:", raceStartTime);
 }
+
+function checkRaceEnd() {
+    if (gameState !== 'RACING') return; // Only check if racing
+
+    // Count how many players *started* the race and are *still connected*
+    const participatingPlayerIds = Object.keys(players).filter(id => assignedSpawnPoints.has(parseInt(id)));
+    const connectedParticipantCount = participatingPlayerIds.length;
+
+    // Check if all connected participants have finished
+    if (connectedParticipantCount > 0 && finishedPlayers.size >= connectedParticipantCount) {
+        console.log("All connected players have finished. Calculating results...");
+        gameState = 'RESULTS'; // Or 'WAITING' if you prefer immediate reset
+
+        const results = [];
+        for (const playerIdStr of participatingPlayerIds) {
+            const playerId = parseInt(playerIdStr);
+            const finishTime = playerFinishTimes[playerId];
+            const player = players[playerId];
+
+            if (finishTime && player) { // Ensure they actually finished
+                const raceDuration = finishTime - raceStartTime;
+                results.push({
+                    id: playerId,
+                    name: player.name,
+                    time: raceDuration
+                });
+            } else if (player) {
+                // Player connected but didn't finish (maybe disconnected mid-race and rejoined lobby?)
+                // Or handle DNF state if tracking disconnects more precisely
+                results.push({
+                    id: playerId,
+                    name: player.name,
+                    time: null // Indicate DNF or infinite time
+                });
+            }
+        }
+
+        // Sort results: lowest time first, null times (DNF) last
+        results.sort((a, b) => {
+            if (a.time === null) return 1; // a is DNF, put last
+            if (b.time === null) return -1; // b is DNF, put last
+            return a.time - b.time; // Sort by time numerically
+        });
+
+        console.log("Broadcasting results:", results);
+        broadcast({ type: 'showResults', results: results });
+
+        // Reset for next game potentialy after a delay or client action
+        // gameState = 'WAITING';
+        // raceStartTime = null;
+        // assignedSpawnPoints.clear(); // Clear spawns for next game
+    } else {
+        console.log(`Race end check: ${finishedPlayers.size} finished / ${connectedParticipantCount} connected participants.`);
+    }
+}
+
+
 
 wss.on('connection', (ws) => {
     const id = nextPlayerId++;
@@ -232,6 +275,22 @@ wss.on('connection', (ws) => {
                 }
                 break;
 
+            case 'raceFinished':
+                // Ensure player is racing and hasn't finished already
+                if (gameState === 'RACING' && players[id] && !finishedPlayers.has(id)) {
+                    // Check if they were actually part of the race start
+                    if (assignedSpawnPoints.has(id)) {
+                        console.log(`Player ${id} (${players[id].name}) finished the race.`);
+                        playerFinishTimes[id] = Date.now();
+                        finishedPlayers.add(id);
+                        // Don't broadcast finish time here, wait until all finish
+                        checkRaceEnd(); // Check if everyone is done
+                    } else {
+                        console.log(`Player ${id} sent raceFinished but wasn't in the race start assignments.`);
+                    }
+                }
+                break;
+
             default:
                 console.log(`Unhandled message type from ${id}: ${data.type}`);
         }
@@ -240,41 +299,49 @@ wss.on('connection', (ws) => {
 
     // --- Close Handling ---
     ws.on('close', () => {
-        console.log(`${players[id]?.name || `Player ${id}`} (ID: ${id}) disconnected`);
+        const disconnectedPlayerId = id; // Use the id from the outer scope
+        const playerName = players[disconnectedPlayerId]?.name || `Player ${disconnectedPlayerId}`;
+        console.log(`${playerName} (ID: ${disconnectedPlayerId}) disconnected`);
 
         // Free up spawn point if game started and player had one
-        const spawnIndex = players[id]?.spawnPointIndex;
-        if (spawnIndex !== undefined && spawnIndex !== null) {
-            assignedSpawnPoints.delete(id);
+        const spawnIndex = players[disconnectedPlayerId]?.spawnPointIndex;
+        let wasParticipant = false;
+        if (spawnIndex !== undefined && spawnIndex !== null && assignedSpawnPoints.has(disconnectedPlayerId)) {
+            // We don't necessarily need to delete from assignedSpawnPoints map here,
+            // as checkRaceEnd relies on players object keys filtered by this map.
+            console.log(`Player ${disconnectedPlayerId} who was participating disconnected.`);
+            wasParticipant = true;
         }
 
-        const wasHost = (id === hostId);
-        delete players[id]; // Remove from player list
+        const wasHost = (disconnectedPlayerId === hostId);
+        delete players[disconnectedPlayerId]; // Remove from player list *after* checking participation
 
         // Notify remaining players
         broadcast({
             type: 'playerDisconnected',
-            playerId: id
+            playerId: disconnectedPlayerId
         });
 
         // If the host disconnected, designate a new one
         if (wasHost) {
-            console.log(`Host (ID: ${id}) disconnected.`);
+            console.log(`Host (ID: ${disconnectedPlayerId}) disconnected.`);
             designateNewHost();
         }
 
         // Optional: Reset to WAITING if game was running and too few players remain
-        if (gameState === 'RACING' && Object.keys(players).length < MIN_PLAYERS_TO_START) {
-            console.log("Not enough players to continue racing, returning to WAITING state.");
-            // gameState = 'WAITING'; // Implement game reset logic if needed
-            // broadcast({ type: 'gameEnded' }); // Notify clients game ended
+        if (gameState === 'RACING' && wasParticipant) {
+            console.log("A race participant disconnected, checking race end condition.");
+            checkRaceEnd();
         }
         if (Object.keys(players).length === 0) {
             console.log("Last player disconnected. Resetting state.");
             gameState = 'WAITING';
             hostId = null;
-            gameSettings = { rounds: 3 }; // Reset settings
+            gameSettings = { rounds: 3 };
             assignedSpawnPoints.clear();
+            playerFinishTimes = {};
+            finishedPlayers.clear();
+            raceStartTime = null;
         }
     });
 
