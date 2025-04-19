@@ -707,15 +707,55 @@ export class Game extends Scene
                     if (this.car.laps >= this.totalLaps) {
                         console.log("Client: Race Finished! Notifying server.");
                         // Don't change gameState here, wait for server's showResults
-                        // Just send the notification
-                        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-                            this.socket.send(JSON.stringify({ type: 'raceFinished' }));
+                        if (!this.localPlayerFinished) {
+                            console.log("Client: Local Race Finished! Freezing car...");
+                            this.localPlayerFinished = true;
+                            if (this.car) {
+                                this.car.setActive(false);
+                                this.car.setVelocity(0, 0);
+                            }
+                            this.cursors = null;
+                            // Just send the notification
+                            if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+                                this.socket.send(JSON.stringify({type: 'raceFinished'}));
+                            }
                         }
                         // Optionally disable controls immediately for responsiveness
                         // this.cursors = null;
                     }
                 }
             } // End finish line check
+
+
+            // --- Check for Race Finish ---
+            if (this.car.laps >= this.totalLaps) {
+                // Only freeze if not already finished (prevents running this multiple times)
+                if (!this.localPlayerFinished) {
+                    console.log("Client: Local Race Finished! Freezing car, waiting for others...");
+                    this.localPlayerFinished = true; // Set the flag
+
+                    // --- Freeze the car ---
+                    if (this.car) { // Check car still exists
+                        // 1. Stop Phaser's updates & potentially physics interactions
+                        this.car.setActive(false);
+
+                        // 2. Immediately kill velocity
+                        this.car.setVelocity(0, 0); // Or Matter.Body.setVelocity(this.car.body, {x:0, y:0});
+
+                        // Optional: Make it temporarily static so other cars don't push it easily
+                        // Be cautious: This can feel unnatural if others crash into a suddenly immovable object.
+                        // Matter.Body.setStatic(this.car.body, true);
+                    }
+
+                    // 3. Disable controls for this car
+                    this.cursors = null;
+
+                    // --- Notify Server ---
+                    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+                        this.socket.send(JSON.stringify({ type: 'raceFinished' }));
+                    }
+                }
+            } // End Race Finish Check
 
 
             // Update car
