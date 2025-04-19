@@ -233,66 +233,103 @@ wss.on('connection', (ws) => {
     // --- Message Handling for this client ---
     ws.on('message', (message) => {
         let data;
+        const senderId = ws.playerId; // <<< Get the reliable sender ID stored on the WebSocket object
+
         try {
             data = JSON.parse(message);
-            data.playerId = id; // Add sender ID server-side for context
         } catch (e) {
-            console.error(`Failed to parse message from ${id}: ${message}`);
+            console.error(`Failed to parse message from ${senderId}: ${message}`); // Use senderId for logging
             return;
         }
+
+        // Add the sender ID to the data object specifically for types
+        // that need it when broadcast to other clients.
+        // Primarily 'playerUpdate'.
 
         switch (data.type) {
             case 'playerUpdate':
                 if (gameState === 'RACING') {
-                    // Store last known state? Maybe not needed for this example
-                    // players[id].lastX = data.x;
-                    // players[id].lastY = data.y;
-                    // players[id].lastRotation = data.rotation;
-                    broadcast(data, id); // Broadcast update to others
+                    // <<< CRITICAL FIX: Add senderId to the data object before broadcasting >>>
+                    data.playerId = senderId;
+                    broadcast(data, senderId); // Broadcast update to others (excluding sender)
                 }
                 break;
 
             case 'setRounds':
-                // Only host can change settings, and only while waiting
-                if (gameState === 'WAITING' && id === hostId) {
+                // Logic uses senderId directly for validation, broadcast doesn't need sender ID embedded
+                if (gameState === 'WAITING' && senderId === hostId) {
                     const newRounds = parseInt(data.rounds, 10);
-                    if (!isNaN(newRounds) && newRounds > 0 && newRounds <= 10) { // Validation
+                    if (!isNaN(newRounds) && newRounds > 0 && newRounds <= 10) {
                         gameSettings.rounds = newRounds;
-                        console.log(`Host ${id} set rounds to ${newRounds}`);
+                        console.log(`Host ${senderId} set rounds to ${newRounds}`);
+                        // Broadcast the settings change (doesn't need playerId embedded)
                         broadcast({ type: 'updateLobbySettings', settings: gameSettings });
                     } else {
-                        console.warn(`Host ${id} tried to set invalid rounds: ${data.rounds}`);
+                        console.warn(`Host ${senderId} tried to set invalid rounds: ${data.rounds}`);
                     }
                 }
                 break;
 
             case 'requestStartGame':
-                // Only host can start, and only while waiting
-                if (gameState === 'WAITING' && id === hostId) {
-                    startGame(id); // Pass starter ID for checks/logging
+                // Logic uses senderId directly for validation
+                if (gameState === 'WAITING' && senderId === hostId) {
+                    startGame(senderId); // startGame handles broadcasting the 'startGame' message
                 } else {
-                    console.warn(`Non-host ${id} or invalid state (${gameState}) tried to start game.`);
+                    console.warn(`Non-host ${senderId} or invalid state (${gameState}) tried to start game.`);
                 }
                 break;
 
             case 'raceFinished':
-                // Ensure player is racing and hasn't finished already
-                if (gameState === 'RACING' && players[id] && !finishedPlayers.has(id)) {
-                    // Check if they were actually part of the race start
-                    if (assignedSpawnPoints.has(id)) {
-                        console.log(`Player ${id} (${players[id].name}) finished the race.`);
-                        playerFinishTimes[id] = Date.now();
-                        finishedPlayers.add(id);
-                        // Don't broadcast finish time here, wait until all finish
-                        checkRaceEnd(); // Check if everyone is done
+                // Logic uses senderId directly
+                if (gameState === 'RACING' && players[senderId] && !finishedPlayers.has(senderId)) {
+                    if (assignedSpawnPoints.has(senderId)) {
+                        console.log(`Player ${senderId} (${players[senderId].name}) finished the race.`);
+                        playerFinishTimes[senderId] = Date.now();
+                        finishedPlayers.add(senderId);
+                        checkRaceEnd(); // Doesn't need playerId embedded in broadcast
                     } else {
-                        console.log(`Player ${id} sent raceFinished but wasn't in the race start assignments.`);
+                        console.log(`Player ${senderId} sent raceFinished but wasn't in the race start assignments.`);
+                    }
+                }
+                break;
+
+            case 'requestReturnToLobby':
+                // Logic uses senderId directly, broadcast sends 'lobbyInfo'
+                if (gameState === 'RESULTS' || gameState === 'RACING') {
+                    console.log(`Player ${senderId} requested return to lobby from state ${gameState}. Resetting game.`);
+                    gameState = 'WAITING';
+                    // ... reset game state ...
+                    // Broadcast personalized lobbyInfo to all clients
+                    for (const pidStr in players) { // Send personalized lobbyInfo
+                        const pid = parseInt(pidStr);
+                        const player = players[pid];
+                        if (player.ws.readyState === WebSocket.OPEN) {
+                            player.ws.send(JSON.stringify({
+                                type: 'lobbyInfo',
+                                playerId: pid,
+                                isHost: (pid === hostId),
+                                players: getPlayersInfo(),
+                                settings: gameSettings
+                            }));
+                        }
+                    }
+                } else if (gameState === 'WAITING') {
+                    console.log(`Player ${senderId} requested return to lobby, but already in WAITING state.`);
+                    // Re-send lobby info to just this player
+                    if (players[senderId]?.ws.readyState === WebSocket.OPEN) {
+                        players[senderId].ws.send(JSON.stringify({
+                            type: 'lobbyInfo',
+                            playerId: senderId,
+                            isHost: (senderId === hostId),
+                            players: getPlayersInfo(),
+                            settings: gameSettings
+                        }));
                     }
                 }
                 break;
 
             default:
-                console.log(`Unhandled message type from ${id}: ${data.type}`);
+                console.log(`Unhandled message type from ${senderId}: ${data.type}`); // Use senderId for logging
         }
     });
 
