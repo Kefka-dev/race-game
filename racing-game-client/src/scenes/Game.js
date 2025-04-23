@@ -587,6 +587,7 @@ export class Game extends Scene
         this.totalLaps = 0;
         this.raceStartTime = 0;
         this.elapsedRaceTime = 0;
+        this.localPlayerFinished = false;
         // Don't clear lobby elements here, manage separately
     }
 
@@ -710,35 +711,6 @@ export class Game extends Scene
                     }
                 }
             } // End finish line check
-
-
-            // --- Check for Race Finish ---
-            if (this.car.laps >= this.totalLaps) {
-                // Only freeze if not already finished (prevents running this multiple times)
-                if (!this.localPlayerFinished) {
-                    //console.log("Client: Local Race Finished! Freezing car, waiting for others...");
-                    this.localPlayerFinished = true; // Set the flag
-
-                    // --- Freeze the car ---
-                    if (this.car) { // Check car still exists
-                        // 1. Stop Phaser's updates & potentially physics interactions
-                        this.car.setActive(false);
-
-                        // 2. Immediately kill velocity
-                        this.car.setVelocity(0, 0); // Or Matter.Body.setVelocity(this.car.body, {x:0, y:0});
-
-                    }
-
-                    // 3. Disable controls for this car
-                    this.cursors = null;
-
-                    // --- Notify Server ---
-                    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-                        this.socket.send(JSON.stringify({ type: 'raceFinished' }));
-                    }
-                }
-            } // End Race Finish Check
-
 
             // Update car
             this.car.update(delta);
