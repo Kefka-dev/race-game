@@ -95,7 +95,7 @@ export class Game extends Scene
             // Store reference if needed elsewhere (like debug draw)
             this.checkpoints.push(cpBody);
         });
-        console.log(`Created ${this.totalCheckpoints} checkpoints.`);
+        //console.log(`Created ${this.totalCheckpoints} checkpoints.`);
         // --- End Checkpoint Creation ---
 
         //LobbySetup
@@ -125,7 +125,7 @@ export class Game extends Scene
         this.startButton.addEventListener('click', () => {
             if (this.isHost && this.socket && this.socket.readyState === WebSocket.OPEN) {
                 this.startErrorElement.textContent = ''; // Clear previous errors
-                console.log("Requesting game start...");
+                //console.log("Requesting game start...");
                 this.socket.send(JSON.stringify({ type: 'requestStartGame' }));
             }
         });
@@ -133,15 +133,15 @@ export class Game extends Scene
         // <<< Add listener for the Back to Lobby button >>>
         if (this.backToLobbyButton) { // Check if the button exists
             this.backToLobbyButton.addEventListener('click', () => {
-                console.log("Back to Lobby button clicked.");
+                //console.log("Back to Lobby button clicked.");
                 // Check connection and send request to server
                 if (this.socket && this.socket.readyState === WebSocket.OPEN) {
                     // Only send if not already in WAITING state (prevents spamming)
                     if (this.gameState !== 'WAITING') {
-                        console.log("Sending requestReturnToLobby to server...");
+                        //console.log("Sending requestReturnToLobby to server...");
                         this.socket.send(JSON.stringify({ type: 'requestReturnToLobby' }));
                     } else {
-                        console.log("Already in WAITING state or returning.");
+                        //console.log("Already in WAITING state or returning.");
                     }
                 } else {
                     console.error("Cannot return to lobby: WebSocket not connected.");
@@ -160,14 +160,14 @@ export class Game extends Scene
 
 
         this.socket.addEventListener('open', () => {
-            console.log('Connected to server!');
+            //console.log('Connected to server!');
             this.showLobby();
             this.hideResults(); // Ensure results are hidden
         });
 
         this.socket.addEventListener('message', (event) => {
             const msg = JSON.parse(event.data);
-            // console.log("Received message:", msg); // Debugging
+            // //console.log("Received message:", msg); // Debugging
 
             switch (msg.type) {
                 case 'lobbyInfo':
@@ -179,9 +179,9 @@ export class Game extends Scene
                     this.updatePlayerList(msg.players); // players is now an object { id: name, ... }
                     this.updateLobbySettings(msg.settings); // e.g., { rounds: 3 }
                     this.updateLobbyVisibility(); // Show/hide host controls
-                    console.log(`Assigned Player ID: ${this.playerId}, Is Host: ${this.isHost}`);
+                    //console.log(`Assigned Player ID: ${this.playerId}, Is Host: ${this.isHost}`);
                     if (this.gameState !== 'WAITING') {
-                        console.log("Received lobbyInfo, setting gameState to WAITING");
+                        //console.log("Received lobbyInfo, setting gameState to WAITING");
                         this.gameState = 'WAITING';
                         // We might need more cleanup here if coming from RACING/RESULTS unexpectedly
                         this.resetGameElements(); // Ensure cars etc are cleared
@@ -190,7 +190,7 @@ export class Game extends Scene
                     break;
 
                 case 'startGame':
-                    console.log("--- Game Start Signal Received ---");
+                    //console.log("--- Game Start Signal Received ---");
                     this.hideLobby(); // Hide lobby overlay
                     this.hideResults(); // Ensure results are hidden
                     this.gameState = 'RACING';
@@ -221,7 +221,7 @@ export class Game extends Scene
                     this.car.setRotation(spawnRotation || Math.PI / 2); // Use provided rotation
                     this.car.playerId = this.playerId; // Assign ID if needed on car object
 
-                    console.log('Car parts structure:', this.car.body.parts.map((p, index) => `Index <span class="math-inline">\{index\}\: Label\='</span>{p.label}', ID=${p.id}`));
+                    //console.log('Car parts structure:', this.car.body.parts.map((p, index) => `Index <span class="math-inline">\{index\}\: Label\='</span>{p.label}', ID=${p.id}`));
                     // Enable controls NOW
                     this.cursors = this.input.keyboard.createCursorKeys();
 
@@ -230,7 +230,7 @@ export class Game extends Scene
                         const id = parseInt(pId);
                         if (id !== this.playerId) { // Don't create self again
                             if (!this.otherCars[id]) { // Check if not already created (e.g. by late join update)
-                                console.log(`Creating initial car for player ${id}`);
+                                //console.log(`Creating initial car for player ${id}`);
                                 this.otherCars[id] = new Car(this, pData.x, pData.y, 'car2');
                                 this.otherCars[id].setRotation(pData.rotation);
                                 this.otherCars[id].playerId = id; // Assign ID if needed
@@ -286,18 +286,18 @@ export class Game extends Scene
                         const joinedPlayerId = msg.player.id;
                         const joinedPlayerName = msg.player.name;
 
-                        console.log(`Player joined event: ID=${joinedPlayerId}, Name=${joinedPlayerName}`);
+                        //console.log(`Player joined event: ID=${joinedPlayerId}, Name=${joinedPlayerName}`);
 
                         //Check if player already exists in the list
                         const existingPlayerLi = this.playerListElement.querySelector(`li[data-player-id="${joinedPlayerId}"]`);
 
                         if (!existingPlayerLi) {
-                            console.log(`Adding player ${joinedPlayerId} to list.`);
+                            //console.log(`Adding player ${joinedPlayerId} to list.`);
                             this.addPlayerToList(joinedPlayerId, joinedPlayerName);
                         } else {
                             // Player might already be in the list if this client just joined
                             // and received lobbyInfo followed by their own playerJoined event.
-                            console.log(`Player ${joinedPlayerId} already in list, skipping add.`);
+                            //console.log(`Player ${joinedPlayerId} already in list, skipping add.`);
                         }
 
                     } else {
@@ -306,7 +306,7 @@ export class Game extends Scene
                     break;
 
                 case 'playerDisconnected':
-                    console.log(`Player ${msg.playerId} disconnected`);
+                    //console.log(`Player ${msg.playerId} disconnected`);
                     this.removePlayerFromList(msg.playerId);
                     // Also handle removing the car if the game started
                     const car = this.otherCars[msg.playerId];
@@ -325,7 +325,7 @@ export class Game extends Scene
                     this.isHost = (this.playerId === msg.hostId);
                     this.updateLobbyVisibility();
                     this.updatePlayerListHostIndicator(msg.hostId); // Add visual indicator to list
-                    console.log(`New host is Player ${msg.hostId}. Am I host? ${this.isHost}`);
+                    //console.log(`New host is Player ${msg.hostId}. Am I host? ${this.isHost}`);
                     break;
 
                 // New: Handle start game error (e.g., not enough players)
@@ -339,12 +339,6 @@ export class Game extends Scene
                     // Only process if game is running and it's not our own update
                     if (this.gameState === 'RACING' && msg.playerId !== this.playerId) {
                         if (!this.otherCars[msg.playerId]) {
-                            console.log(`Creating car for player ${msg.playerId} from update`);
-                            // Need spawn point if creating here - preferably create in startGame
-                            // This path might indicate a late joiner whose initial state wasn't in startGame
-                            // For robustness, maybe use a default spawn or request info?
-                            // Or ensure 'startGame' includes all players present *at that moment*.
-                            // If the server handles late joins correctly by sending `startGame`, this might not be hit often for creation.
                             this.otherCars[msg.playerId] = new Car(this, msg.x, msg.y, 'car2');
                             this.otherCars[msg.playerId].playerId = msg.playerId;
                         }
@@ -357,15 +351,13 @@ export class Game extends Scene
                     break;
 
                 case 'showResults':
-                    console.log("--- Show Results Signal Received ---", msg.results);
+                    //console.log("--- Show Results Signal Received ---", msg.results);
                     this.gameState = 'RESULTS'; // Set state
                     this.hideGameUI(); // Hide lap counter, timer
                     this.populateResults(msg.results); // Populate HTML
                     this.showResults(); // Show the HTML overlay
                     // Optionally stop car movement, etc.
                     if (this.car) {
-                        // Example: Disable input or stop physics if needed
-                        // this.car.body.setVelocity(0, 0); // Stop car instantly
                         this.car.setActive(false); // Stop updates/physics interaction
                     }
                     this.cursors = null; // Disable controls
@@ -374,13 +366,13 @@ export class Game extends Scene
 
                 // Add default case for unexpected messages
                 default:
-                    console.log(`Unhandled message type: ${msg.type}`);
+                    //console.log(`Unhandled message type: ${msg.type}`);
             }
         });
 
         // --- WebSocket Close/Error Handling ---
         this.socket.addEventListener('close', () => {
-            console.log('Disconnected from server.');
+            //console.log('Disconnected from server.');
             this.gameState = 'WAITING';
             this.showLobby(); // Show lobby overlay on disconnect
             this.hideResults(); // Hide results on disconnect
@@ -421,7 +413,7 @@ export class Game extends Scene
         this.matter.world.on('collisionstart', (event) => {
             event.pairs.forEach((pair) => {
                 const { bodyA, bodyB } = pair;
-                // console.log(`Pair: A='${bodyA.label}', B='${bodyB.label}'`); // Keep for debugging
+                // //console.log(`Pair: A='${bodyA.label}', B='${bodyB.label}'`); // Keep for debugging
 
                 // --- Checkpoint Collision Logic ---
                 let carBodyPartForCP = null;
@@ -443,9 +435,9 @@ export class Game extends Scene
 
                         if (checkpointIndex === expectedIndex) {
                             this.car.lastCheckpointPassed = checkpointIndex;
-                            console.log(`Client: Passed Checkpoint ${checkpointIndex}`);
+                            //console.log(`Client: Passed Checkpoint ${checkpointIndex}`);
                         } else {
-                            console.log(`Client: Hit Checkpoint ${checkpointIndex} out of order (expected ${expectedIndex}). Ignoring.`);
+                            //console.log(`Client: Hit Checkpoint ${checkpointIndex} out of order (expected ${expectedIndex}). Ignoring.`);
                         }
                     }
                 } // End Checkpoint Logic
@@ -482,7 +474,7 @@ export class Game extends Scene
 
                     // Apply penalty logic ONLY if it's the local player's car that did the hitting
                     if (hittingCar && hittingCar === this.car) {
-                        console.log('My car caused rear-end collision!');
+                        //console.log('My car caused rear-end collision!');
 
                         // Prevent applying penalty multiple times quickly
                         if (this.car.maxSpeed === this.car.originalMaxSpeed) {
@@ -490,14 +482,14 @@ export class Game extends Scene
                             if (this.car.speed > this.car.maxSpeed) {
                                 this.car.speed = this.car.maxSpeed;
                             }
-                            console.log('Max speed reduced.');
+                            //console.log('Max speed reduced.');
 
                             // Restore speed after delay using the scene's timer
                             this.time.delayedCall(5000, () => {
                                 // Check car still exists before restoring
                                 if (this.car) {
                                     this.car.maxSpeed = this.car.originalMaxSpeed;
-                                    console.log('Max speed restored.');
+                                    //console.log('Max speed restored.');
                                 }
                             }, null, this); // 'this' context is the scene
                         }
@@ -569,9 +561,6 @@ export class Game extends Scene
             }
 
             li.textContent = `${place}. ${playerResult.name} - ${timeString}`;
-            // You could add classes for styling:
-            // li.classList.add('result-item');
-            // if (playerResult.id === this.playerId) li.classList.add('result-self');
             this.resultsListElement.appendChild(li);
         });
     }
@@ -608,8 +597,6 @@ export class Game extends Scene
         for (const [id, name] of Object.entries(players)) {
             this.addPlayerToList(id, name);
         }
-        // Optionally highlight the host after rebuilding the list
-        // this.updatePlayerListHostIndicator(currentHostIdFromServer);
     }
 
     addPlayerToList(playerId, playerName) {
@@ -687,8 +674,8 @@ export class Game extends Scene
 
             // Skontroluj, či je tile na ceste
             if (tile && !tile.properties.onTrack) {
-                // console.log('Auto je na ceste');
-                // console.log('Auto nie je na ceste');
+                // //console.log('Auto je na ceste');
+                // //console.log('Auto nie je na ceste');
                 if (this.car.speed > 2 ){
                     this.car.speed = 2;
                 }
@@ -697,7 +684,7 @@ export class Game extends Scene
                 if (this.car.lastCheckpointPassed === this.totalCheckpoints - 1) {
                     this.car.laps++;
                     this.car.lastCheckpointPassed = -1;
-                    console.log(`Client: Lap ${this.car.laps} completed!`);
+                    //console.log(`Client: Lap ${this.car.laps} completed!`);
 
                     if (this.lapText) {
                         this.lapText.setText(`Lap: ${this.car.laps} / ${this.totalLaps}`);
@@ -705,10 +692,10 @@ export class Game extends Scene
 
                     // --- Check for Race Finish ---
                     if (this.car.laps >= this.totalLaps) {
-                        console.log("Client: Race Finished! Notifying server.");
+                        //console.log("Client: Race Finished! Notifying server.");
                         // Don't change gameState here, wait for server's showResults
                         if (!this.localPlayerFinished) {
-                            console.log("Client: Local Race Finished! Freezing car...");
+                            //console.log("Client: Local Race Finished! Freezing car...");
                             this.localPlayerFinished = true;
                             if (this.car) {
                                 this.car.setActive(false);
@@ -720,8 +707,6 @@ export class Game extends Scene
                                 this.socket.send(JSON.stringify({type: 'raceFinished'}));
                             }
                         }
-                        // Optionally disable controls immediately for responsiveness
-                        // this.cursors = null;
                     }
                 }
             } // End finish line check
@@ -731,7 +716,7 @@ export class Game extends Scene
             if (this.car.laps >= this.totalLaps) {
                 // Only freeze if not already finished (prevents running this multiple times)
                 if (!this.localPlayerFinished) {
-                    console.log("Client: Local Race Finished! Freezing car, waiting for others...");
+                    //console.log("Client: Local Race Finished! Freezing car, waiting for others...");
                     this.localPlayerFinished = true; // Set the flag
 
                     // --- Freeze the car ---
@@ -742,9 +727,6 @@ export class Game extends Scene
                         // 2. Immediately kill velocity
                         this.car.setVelocity(0, 0); // Or Matter.Body.setVelocity(this.car.body, {x:0, y:0});
 
-                        // Optional: Make it temporarily static so other cars don't push it easily
-                        // Be cautious: This can feel unnatural if others crash into a suddenly immovable object.
-                        // Matter.Body.setStatic(this.car.body, true);
                     }
 
                     // 3. Disable controls for this car
@@ -804,17 +786,12 @@ export class Game extends Scene
                 });
 
             } // End if debug visible
-        } else {
-            // What happens while WAITING? Maybe camera panning, displaying player list?
-            // For now, nothing happens.
         }
 
         // Update other cars visual state regardless of local game state (they might be racing)
         Object.values(this.otherCars).forEach(otherCar => {
-            // If your Car class has visual updates in its update method that don't depend on physics, call them here.
-            // e.g., otherCar.updateVisuals(delta);
             otherCar.update(delta); // Assuming update handles visual aspects
-            // If not, the setPosition/setRotation in the message handler might be sufficient.
+
         });
 
         // If debug is active, clear it even if waiting, otherwise old lines persist

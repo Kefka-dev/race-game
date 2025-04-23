@@ -184,10 +184,6 @@ function checkRaceEnd() {
         console.log("Broadcasting results:", results);
         broadcast({ type: 'showResults', results: results });
 
-        // Reset for next game potentialy after a delay or client action
-        // gameState = 'WAITING';
-        // raceStartTime = null;
-        // assignedSpawnPoints.clear(); // Clear spawns for next game
     } else {
         console.log(`Race end check: ${finishedPlayers.size} finished / ${connectedParticipantCount} connected participants.`);
     }
