@@ -25,8 +25,6 @@ location /game {
 
 ```
 
-```nginx
-
 Pri zmene konfiguracie supervisora
 ```shell
 sudo supervisorccrl reread
